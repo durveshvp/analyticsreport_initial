@@ -1,0 +1,194 @@
+import React, { Component } from 'react';
+import { Container, Row, Col, Form, Tabs, Tab, Nav } from "react-bootstrap";
+import { FaList } from 'react-icons/fa';
+import Side from "./Sidebar";
+import Top from "./Topbar";
+import Loader from "./LoaderModal";
+import AnalyticsReport from './AnalyticsReport';
+import C from '../lib/Config';
+import swal from 'sweetalert';
+
+export default class Analytics extends Component {
+    constructor(props) {
+        super(props);
+        this.state = {
+            searchQuery: '',
+            filteredPatients: [],
+            loaderModal: false,
+            activeCaseData: [],
+            selectedPatient: null,
+        };
+        this.handleSearch = this.handleSearch.bind(this);
+        this.getActiveCases = this.getActiveCases.bind(this);
+        this.selectPatient = this.selectPatient.bind(this);
+    }
+
+    handleSearch(event) {
+        const query = event.target.value.toLowerCase();
+        this.setState({ searchQuery: query });
+
+        if (query.length > 0) {
+            const filteredPatients = this.state.activeCaseData.filter(patient =>
+                patient.name.toLowerCase().includes(query)
+            );
+            this.setState({ filteredPatients });
+        } else {
+            this.setState({ filteredPatients: [] });
+        }
+    }
+
+    getActiveCases() {
+        let loggedInuser = localStorage.getItem("userId");
+        let data = JSON.parse(localStorage.getItem('userRoleDto'));
+        let roleIdFromCache = data.roleId;
+
+        let url = '';
+        if (roleIdFromCache === 3) {
+            url = `${C.getUrl()}/userCase/getPatientRegistrationListForStaff?userId=${loggedInuser}&status=A`;
+        } else {
+            url = `${C.getUrl()}/userCase/getPatientRegistrationList?doctorId=${loggedInuser}&status=A`;
+        }
+        return fetch(url, {
+            method: 'GET',
+            mode: 'cors',
+        })
+            .then(res => res.json())
+            .then(res => {
+                let resObj = res;
+                let error = resObj.subErrors;
+                if (error !== 'undefined' && error !== null && error !== "") {
+                    swal({ title: "Warning!", text: "Error : " + error, icon: "error", buttons: false, timer: 2000, });
+                } else {
+                    let obj = resObj.message;
+                    if (obj === 'No record found.') {
+                        this.setState({ activeCaseData: [] });
+                    } else {
+                        let tempData = JSON.parse(resObj.message);
+                        let activeCaseData = tempData.map(obj => ({
+                            name: `${obj.firstName} ${obj.lastName}`,
+                            patientID: obj.patientID
+                        }));
+                        this.setState({ activeCaseData });
+                    }
+                }
+            })
+            .catch(err => {
+                swal({ title: "Warning!", text: "Error : " + err, icon: "error", buttons: false, timer: 2000, });
+            });
+    }
+
+    selectPatient(patient) {
+        localStorage.setItem('patientId', patient.patientID);
+        this.setState({ selectedPatient: patient, searchQuery: '', filteredPatients: [] });
+    }
+
+    componentDidMount() {
+        this.setState({ loaderModal: true });
+
+        setTimeout(() => {
+            this.getActiveCases();
+            this.setState({ loaderModal: false });
+        }, 1500);
+    }
+
+    render() {
+        const { searchQuery, filteredPatients, selectedPatient } = this.state;
+
+        return (
+            <div className="d-flex" id="wrapper">
+                <Side />
+                <div id="content-wrapper" className="d-flex flex-column">
+                    <div id="content">
+                        <Top />
+                        <div className="container-fluid">
+                            <div className="app-content">
+                                <section className="section" id="accordion">
+                                    <Row>
+                                        <Col lg='12'>
+                                            <Tab.Container id="left-tabs-example" defaultActiveKey="first">
+                                                <Row>
+                                                    <Col lg='3'>
+                                                        <div className="card">
+                                                            <div className="card-header">
+                                                                <h3 className="font-weight-bold mb-0 text-black">Reports</h3>
+                                                            </div>
+                                                            <div className="card-body p-0" id="mycard-collapse">
+                                                                <Nav variant="pills" className="flex-column list-group list-cyan">
+                                                                    <Nav.Item>
+                                                                        <Nav.Link className="list-group-item list-group-item-action radius-0" eventKey="first" onClick={this.getActiveCases}>
+                                                                            <span><FaList className='mr-4' style={{ verticalAlign: "text-top" }} /></span>Patient Profile Information
+                                                                        </Nav.Link>
+                                                                    </Nav.Item>
+                                                                </Nav>
+                                                            </div>
+                                                        </div>
+                                                    </Col>
+                                                    <Col lg='9'>
+                                                        <Tab.Content>
+                                                            <Tab.Pane eventKey="first">
+                                                                <div id="collapseDraft" className="card border-0 pb-0 collapse show" data-parent="#accordion">
+                                                                    <div className="card-body p-3">
+                                                                        <Row className="mb-3">
+                                                                            <Col lg='12'>
+                                                                                <Form.Control 
+                                                                                    type="text" 
+                                                                                    placeholder="Search by Patient Name" 
+                                                                                    value={searchQuery}
+                                                                                    onChange={this.handleSearch}
+                                                                                />
+                                                                            </Col>
+                                                                        </Row>
+                                                                        {filteredPatients.length > 0 && (
+                                                                            <Row>
+                                                                                <Col lg='12'>
+                                                                                    <div>
+                                                                                        {filteredPatients.map(patient => (
+                                                                                            <div key={patient.patientID} className="mb-2">
+                                                                                                <p style={{ cursor: 'pointer' }} onClick={() => this.selectPatient(patient)}>Patient Name: {patient.name}</p>
+                                                                                            </div>
+                                                                                        ))}
+                                                                                    </div>
+                                                                                </Col>
+                                                                            </Row>
+                                                                        )}
+                                                                        {selectedPatient && (
+                                                                            <Row>
+                                                                                <Col lg='12'>
+                                                                                    <AnalyticsReport patientId={selectedPatient.patientID} />
+                                                                                </Col>
+                                                                            </Row>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            </Tab.Pane>
+                                                            <Tab.Pane eventKey="third">
+                                                                <div id="collapseDraft" className="card border-0 pb-0 collapse show" data-parent="#accordion">
+                                                                    <br></br><h1>Medicine Information report</h1>
+                                                                </div>
+                                                            </Tab.Pane>
+                                                            <Tab.Pane eventKey="fourth">
+                                                                <div id="collapseDraft" className="card border-0 pb-0 collapse show" data-parent="#accordion">
+                                                                <br></br><h1>Dosage Information report</h1>
+                                                                </div>
+                                                            </Tab.Pane>
+                                                            <Tab.Pane eventKey="fifth">
+                                                                <div id="collapseDraft" className="card border-0 pb-0 collapse show" data-parent="#accordion">
+                                                                <br></br><h1>Patient exit report</h1>
+                                                                </div>
+                                                            </Tab.Pane>
+                                                        </Tab.Content>
+                                                    </Col>
+                                                </Row>
+                                            </Tab.Container>
+                                        </Col>
+                                    </Row>
+                                </section>
+                            </div>
+                        </div>
+                        <Loader show={this.state.loaderModal} />
+                    </div>
+                </div>
+            </div>
+        );
+    }
+}
